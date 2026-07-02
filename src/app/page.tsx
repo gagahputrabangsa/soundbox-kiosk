@@ -721,6 +721,11 @@ export default function KioskPage() {
               <div className="qris-card">
                 <div className="qris-brand">{t('qrisTitle')}</div>
                 <div className="qris-merchant">{t('qrisMerchant')} {settings.shopName}</div>
+                {qrisTx?.customerName && (
+                  <div style={{ fontSize: 15, color: '#a78bfa', fontWeight: 700, marginTop: 4, letterSpacing: 0.5 }}>
+                    👤 {uiLang === 'en' ? 'Order for:' : uiLang === 'cn' ? '订单姓名：' : 'Atas nama:'} {qrisTx.customerName}
+                  </div>
+                )}
                 
                 <div className="qris-qr-wrapper">
                   <svg width="160" height="160" viewBox="0 0 100 100" style={{ shapeRendering: 'crispEdges' }}>
