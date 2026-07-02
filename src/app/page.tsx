@@ -25,6 +25,11 @@ interface MenuItem {
 }
 
 export default function KioskPage() {
+  // Auth Gates
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [authError, setAuthError] = useState('');
+
   const [uiLang, setUiLang] = useState<'id' | 'en' | 'cn'>('id');
   const t = (key: keyof typeof TRANSLATIONS.id) => TRANSLATIONS[uiLang][key] || TRANSLATIONS.id[key];
 
@@ -56,6 +61,27 @@ export default function KioskPage() {
   const nextPlayTimeRef = useRef<number>(0);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorNodeRef = useRef<ScriptProcessorNode | null>(null);
+
+  // Check auth on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('soundbox_kiosk_auth');
+      if (stored === 'telkomsel123') {
+        setIsAuthenticated(true);
+      }
+    }
+  }, []);
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordInput === 'telkomsel123') {
+      setIsAuthenticated(true);
+      localStorage.setItem('soundbox_kiosk_auth', 'telkomsel123');
+      setAuthError('');
+    } else {
+      setAuthError('Password salah! Coba lagi.');
+    }
+  };
 
   // Fetch settings and menu items from Dashboard API on load
   useEffect(() => {
@@ -344,6 +370,97 @@ export default function KioskPage() {
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
+
+  if (!isAuthenticated) {
+    return (
+      <div className="kiosk-root">
+        <form onSubmit={handleLoginSubmit} style={{
+          width: '90%',
+          maxWidth: '380px',
+          padding: '40px 30px',
+          background: 'rgba(28, 25, 23, 0.7)',
+          backdropFilter: 'blur(16px)',
+          border: '1px solid var(--border-color, rgba(120, 113, 108, 0.2))',
+          borderRadius: '24px',
+          textAlign: 'center',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.7)',
+          animation: 'slide-fade 0.4s ease-out'
+        }}>
+          <div style={{
+            width: '64px', height: '64px', margin: '0 auto 20px',
+            background: 'linear-gradient(135deg, #d97706, #78350f)',
+            borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '28px', boxShadow: '0 8px 24px rgba(217, 119, 6, 0.25)'
+          }}>
+            🔒
+          </div>
+          <h2 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '8px', color: '#fafaf9', letterSpacing: '-0.02em' }}>
+            Soundbox.AI Kiosk
+          </h2>
+          <p style={{ fontSize: '13px', color: '#78716c', marginBottom: '24px', lineHeight: '1.5' }}>
+            Kiosk ini terkunci. Harap hubungi kasir/staf kafe untuk membuka akses voice ordering.
+          </p>
+
+          {authError && (
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              color: '#ef4444',
+              padding: '10px 14px',
+              borderRadius: '12px',
+              fontSize: '13px',
+              marginBottom: '16px',
+              textAlign: 'left'
+            }}>
+              ⚠️ {authError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left', marginBottom: '24px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '800', color: '#a8a29e', textTransform: 'uppercase', letterSpacing: '0.05em' }}>PIN / Password Akses</label>
+            <input
+              type="password"
+              required
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              style={{
+                width: '100%',
+                height: '46px',
+                background: 'rgba(0,0,0,0.3)',
+                border: '1px solid rgba(120, 113, 108, 0.15)',
+                borderRadius: '12px',
+                padding: '0 16px',
+                color: '#fafaf9',
+                outline: 'none',
+                fontSize: '16px',
+                textAlign: 'center',
+                letterSpacing: '0.2em'
+              }}
+              placeholder="••••••••"
+            />
+          </div>
+
+          <button type="submit" style={{
+            width: '100%',
+            height: '46px',
+            border: 'none',
+            background: 'linear-gradient(135deg, #d97706, #b45309)',
+            color: '#0b0908',
+            fontWeight: '800',
+            fontSize: '14px',
+            borderRadius: '23px',
+            cursor: 'pointer',
+            boxShadow: '0 8px 24px rgba(217, 119, 6, 0.2)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            transition: 'all 0.2s'
+          }}>
+            Buka Kiosk
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="kiosk-root">
