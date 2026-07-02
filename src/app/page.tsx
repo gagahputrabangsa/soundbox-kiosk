@@ -12,6 +12,7 @@ interface ShopSettings {
   logo: string;
   themeBg: string;
   screenBgImage?: string;
+  activeDiscount?: number;
 }
 
 interface MenuItem {
@@ -685,16 +686,34 @@ export default function KioskPage() {
           </div>
 
           {/* Cart Summary */}
-          {cart.length > 0 && (
-            <div className="cart-total-box">
-              <div className="total-row">
-                <span className="total-label">{t('totalCart')}</span>
-                <span className="total-amount">
-                  Rp {cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toLocaleString('id-ID')}
-                </span>
+          {cart.length > 0 && (() => {
+            const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            const discountRate = Number(settings.activeDiscount) || 0;
+            const discountAmount = subtotal * (discountRate / 100);
+            const totalAmount = subtotal - discountAmount;
+            return (
+              <div className="cart-total-box" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {discountRate > 0 && (
+                  <>
+                    <div className="total-row" style={{ fontSize: 13, color: '#a8a29e', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 6 }}>
+                      <span>Subtotal</span>
+                      <span>Rp {subtotal.toLocaleString('id-ID')}</span>
+                    </div>
+                    <div className="total-row" style={{ fontSize: 13, color: '#f59e0b', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 6 }}>
+                      <span>Promo ({discountRate}%)</span>
+                      <span>-Rp {discountAmount.toLocaleString('id-ID')}</span>
+                    </div>
+                  </>
+                )}
+                <div className="total-row">
+                  <span className="total-label">{t('totalCart')}</span>
+                  <span className="total-amount">
+                    Rp {totalAmount.toLocaleString('id-ID')}
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* QRIS Overlay */}
           {qrisTx && (
