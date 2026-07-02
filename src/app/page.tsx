@@ -174,7 +174,7 @@ export default function KioskPage() {
 
   // ── WebSocket ────────────────────────────────────────────────────────────────
 
-  const startSimulator = () => {
+  const startSimulator = async () => {
     if (isRunning) return;
     setIsRunning(true);
     setWsStatus('connecting');
@@ -183,11 +183,43 @@ export default function KioskPage() {
     setTranscriptUser('');
     setTranscriptAi(t('connecting'));
 
+    // Fetch fresh settings, menu list, and reports before starting session
+    let latestSettings = settings;
+    let latestMenu = [];
+    let latestTx = [];
+
+    try {
+      const [sRes, mRes, rRes] = await Promise.all([
+        fetch(`${DASHBOARD_URL}/api/settings`).then(r => r.json()).catch(() => settings),
+        fetch(`${DASHBOARD_URL}/api/menu`).then(r => r.json()).catch(() => []),
+        fetch(`${DASHBOARD_URL}/api/reports`).then(r => r.json()).catch(() => ({ transactions: [] }))
+      ]);
+      latestSettings = sRes;
+      latestMenu = mRes;
+      latestTx = rRes.transactions || [];
+
+      // Update local states as well
+      setSettings(latestSettings);
+      const bests = latestMenu.filter((item: any) => item.bestSeller && item.stock > 0).slice(0, 3);
+      setRecommendations(bests.length > 0 ? bests : latestMenu.filter((item: any) => item.stock > 0).slice(0, 3));
+    } catch (e) {
+      console.warn("Could not retrieve latest configuration from Dashboard API. Falling back to cached state.");
+    }
+
     const ws = new WebSocket(PROXY_URL);
     wsRef.current = ws;
 
     ws.onopen = () => {
       setWsStatus('connected');
+      
+      // Handshake latest menu data directly to WebSocket proxy
+      ws.send(JSON.stringify({
+        type: 'custom.client_init',
+        menu: latestMenu,
+        settings: latestSettings,
+        transactions: latestTx
+      }));
+
       setTranscriptAi(uiLang === 'en' ? 'Hello! How can I help you today?' : uiLang === 'cn' ? '您好！请问有什么可以帮您？' : 'Halo! Ada yang bisa saya bantu hari ini?');
       setAiState('idle');
     };
