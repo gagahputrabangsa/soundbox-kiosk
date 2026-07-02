@@ -14,16 +14,27 @@ interface ShopSettings {
   screenBgImage?: string;
 }
 
+interface MenuItem {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  category: string;
+  description: string;
+  bestSeller: boolean;
+}
+
 export default function KioskPage() {
   const [uiLang, setUiLang] = useState<'id' | 'en' | 'cn'>('id');
   const t = (key: keyof typeof TRANSLATIONS.id) => TRANSLATIONS[uiLang][key] || TRANSLATIONS.id[key];
 
-  // Settings from Dashboard API
+  // Settings & Menu Recommendations from Dashboard API
   const [settings, setSettings] = useState<ShopSettings>({
     shopName: 'Kopi Senja',
     logo: '',
     themeBg: 'espresso',
   });
+  const [recommendations, setRecommendations] = useState<MenuItem[]>([]);
 
   // Soundbox States
   const [isRunning, setIsRunning] = useState(false);
@@ -46,8 +57,9 @@ export default function KioskPage() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorNodeRef = useRef<ScriptProcessorNode | null>(null);
 
-  // Fetch settings from Dashboard API on load
+  // Fetch settings and menu items from Dashboard API on load
   useEffect(() => {
+    // 1. Fetch Settings
     fetch(`${DASHBOARD_URL}/api/settings`)
       .then(r => r.json())
       .then(data => {
@@ -57,6 +69,16 @@ export default function KioskPage() {
         }
       })
       .catch(() => console.warn('Could not fetch settings from dashboard, using defaults.'));
+
+    // 2. Fetch Menu for quick recommendations
+    fetch(`${DASHBOARD_URL}/api/menu`)
+      .then(r => r.json())
+      .then((data: MenuItem[]) => {
+        // Filter bestsellers or just top 3 items
+        const bests = data.filter(item => item.bestSeller && item.stock > 0).slice(0, 3);
+        setRecommendations(bests.length > 0 ? bests : data.filter(item => item.stock > 0).slice(0, 3));
+      })
+      .catch(() => console.warn('Could not fetch menu items.'));
   }, []);
 
   // Auto-start recording when connected
@@ -140,7 +162,7 @@ export default function KioskPage() {
 
     ws.onopen = () => {
       setWsStatus('connected');
-      setTranscriptAi(t('stateIdle'));
+      setTranscriptAi(uiLang === 'en' ? 'Hello! How can I help you today?' : uiLang === 'cn' ? '您好！请问有什么可以帮您？' : 'Halo! Ada yang bisa saya bantu hari ini?');
       setAiState('idle');
     };
 
@@ -268,7 +290,7 @@ export default function KioskPage() {
       wsRef.current.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
       wsRef.current.send(JSON.stringify({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_audio", audio: "" }] } }));
       wsRef.current.send(JSON.stringify({ type: "response.create" }));
-      setTranscriptUser('Mengirim suara...');
+      setTranscriptUser(uiLang === 'en' ? 'Sending audio...' : uiLang === 'cn' ? '发送音频...' : 'Mengirim suara...');
       setAiState('thinking');
     }
   };
@@ -302,7 +324,7 @@ export default function KioskPage() {
       if (res.ok) {
         setQrisTx(null);
         setCart([]);
-        setTranscriptAi('Pembayaran QRIS Berhasil! Terima kasih.');
+        setTranscriptAi(uiLang === 'en' ? 'Payment successful! Thank you.' : uiLang === 'cn' ? '支付成功！非常感谢。' : 'Pembayaran QRIS Berhasil! Terima kasih.');
         showToast(t('toastPaymentReceived'));
         try {
           const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -326,12 +348,15 @@ export default function KioskPage() {
   return (
     <div className="kiosk-root">
 
-      {/* Toast */}
+      {/* Toast Notification */}
       {toastMessage && (
-        <div className="toast"><span>☕</span> {toastMessage}</div>
+        <div className="toast">
+          <span className="toast-icon">☕</span>
+          <span className="toast-text">{toastMessage}</span>
+        </div>
       )}
 
-      {/* Language switcher (top-right corner, small) */}
+      {/* Language Switcher Bar */}
       <div className="lang-switcher">
         {(['id', 'en', 'cn'] as const).map(lang => (
           <button
@@ -344,184 +369,230 @@ export default function KioskPage() {
         ))}
       </div>
 
-      {/* Soundbox Device */}
-      <div className={`soundbox-device theme-${settings.themeBg}`}>
-
-        {/* Device Header */}
-        <div className="device-header">
-          <div className="device-logo-area">
-            {settings.logo ? (
-              settings.logo.startsWith('http') || settings.logo.startsWith('data:') ? (
-                <img src={settings.logo} className="device-logo-img" alt="Logo" />
+      {/* Full-Screen Premium Kiosk Layout */}
+      <div className={`kiosk-container theme-${settings.themeBg}`}>
+        
+        {/* LEFT COLUMN: Voice Ordering / AI Barista Console */}
+        <div className="kiosk-left-panel">
+          
+          {/* Header Branding */}
+          <div className="kiosk-header">
+            <div className="brand-wrapper">
+              {settings.logo ? (
+                settings.logo.startsWith('http') || settings.logo.startsWith('data:') ? (
+                  <img src={settings.logo} className="kiosk-logo-img" alt="Logo" />
+                ) : (
+                  <div className="kiosk-logo-placeholder">{settings.logo}</div>
+                )
               ) : (
-                <div className="device-logo-placeholder">{settings.logo}</div>
-              )
-            ) : (
-              <div className="device-logo-placeholder">☕</div>
-            )}
-            <div className="device-title">{settings.shopName} AI</div>
+                <div className="kiosk-logo-placeholder">☕</div>
+              )}
+              <h1 className="kiosk-title">{settings.shopName} AI</h1>
+            </div>
+            
+            <div className="status-indicator">
+              {isRunning ? (
+                <span className="status-pill active-status">{t('statusActive')}</span>
+              ) : (
+                <span className="status-pill standby-status">{t('statusStandby')}</span>
+              )}
+            </div>
           </div>
 
-          {isRunning ? (
-            <span className="device-status-badge online">{t('statusActive')}</span>
-          ) : (
-            <span className="device-status-badge">{t('statusStandby')}</span>
-          )}
-        </div>
+          {/* AI Avatar Display & Waveform */}
+          <div className="avatar-section">
+            <div className={`barista-orb ${aiState}`}>
+              <div className="orb-core">
+                <span className="orb-emoji">🤖</span>
+              </div>
+              <div className="orb-glow-ring ring-1"></div>
+              <div className="orb-glow-ring ring-2"></div>
+            </div>
 
-        {/* Speaker Grill */}
-        <div className="speaker-grill">
-          {Array.from({ length: 32 }).map((_, i) => (
-            <div key={i} className="speaker-hole" />
-          ))}
-        </div>
+            {/* Dynamic Waveform Graph */}
+            <div className={`voice-wave-container ${aiState}`}>
+              {Array.from({ length: 15 }).map((_, i) => (
+                <div key={i} className="voice-wave-bar" />
+              ))}
+            </div>
 
-        {/* Screen */}
-        <div
-          className="device-screen"
-          style={{
-            background: settings.screenBgImage
-              ? `linear-gradient(rgba(9, 8, 7, 0.85), rgba(9, 8, 7, 0.95)), url(${settings.screenBgImage}) center/cover no-repeat`
-              : undefined
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 8 }}>
-            <span style={{ fontSize: 11, color: '#a8a29e' }}>{t('smartBarista')}</span>
-            <span style={{ fontSize: 10, color: '#78716c' }}>v1.0.3</span>
+            <div className="state-label">
+              {aiState === 'listening' && t('stateListening')}
+              {aiState === 'speaking' && t('stateSpeaking')}
+              {aiState === 'thinking' && t('stateThinking')}
+              {aiState === 'idle' && t('stateIdle')}
+            </div>
           </div>
 
-          {/* Waveform */}
-          <div className={`voice-wave-container ${aiState}`}>
-            {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="voice-wave-bar" />
-            ))}
-          </div>
-
-          {/* Status Text */}
-          <div style={{
-            textAlign: 'center', fontSize: 12, fontWeight: 700, textTransform: 'uppercase',
-            color: aiState === 'listening' ? '#3b82f6' : aiState === 'speaking' ? '#10b981' : aiState === 'thinking' ? '#a855f7' : '#a8a29e'
-          }}>
-            {aiState === 'listening' && t('stateListening')}
-            {aiState === 'speaking' && t('stateSpeaking')}
-            {aiState === 'thinking' && t('stateThinking')}
-            {aiState === 'idle' && t('stateIdle')}
-          </div>
-
-          {/* Transcript */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Conversation Transcripts Box */}
+          <div className="conversation-log-container">
             {transcriptUser && (
-              <div className="transcript-bubble user">
-                <span style={{ fontSize: 10, color: '#3b82f6', fontWeight: 700, display: 'block' }}>{t('userLabel')}</span>
-                {transcriptUser}
+              <div className="bubble-card user-bubble">
+                <span className="bubble-role">{t('userLabel')}</span>
+                <p className="bubble-text">{transcriptUser}</p>
               </div>
             )}
             {transcriptAi && (
-              <div className="transcript-bubble assistant">
-                <span style={{ fontSize: 10, color: '#10b981', fontWeight: 700, display: 'block' }}>{t('aiLabel')}</span>
-                {transcriptAi}
+              <div className="bubble-card ai-bubble">
+                <span className="bubble-role">{t('aiLabel')}</span>
+                <p className="bubble-text">{transcriptAi}</p>
+              </div>
+            )}
+            {!transcriptUser && !transcriptAi && (
+              <div className="welcome-prompt">
+                <p>🙋‍♂️ {uiLang === 'en' ? 'Tap the power button below to start ordering with your voice!' : uiLang === 'cn' ? '点击下方按钮即可开始使用语音点单！' : 'Tekan tombol di bawah untuk mulai memesan dengan suara Anda!'}</p>
               </div>
             )}
           </div>
 
-          {/* Cart */}
-          <div className="device-cart-area">
-            <span style={{ fontSize: 10, color: '#a8a29e', fontWeight: 700, textTransform: 'uppercase' }}>{t('activeCart')}</span>
-            {cart.length === 0 ? (
-              <div style={{ margin: 'auto', fontSize: 12, color: '#78716c', textAlign: 'center' }}>{t('noItems')}</div>
+          {/* Microphones and Controls */}
+          <div className="control-bar">
+            {!isRunning ? (
+              <button className="kiosk-btn-power" onClick={startSimulator}>
+                <span className="power-icon">⚡</span>
+                <span className="power-text">{t('powerOn')}</span>
+              </button>
             ) : (
-              cart.map((item, idx) => (
-                <div className="cart-item-row" key={idx}>
-                  <div>
-                    <span className="cart-item-qty">{item.quantity}x</span>
-                    <span>{item.name}</span>
-                  </div>
-                  <span>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
-                </div>
-              ))
-            )}
-            {cart.length > 0 && (
-              <div className="cart-total-section">
-                <span>{t('totalCart')}</span>
-                <span>Rp {cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toLocaleString('id-ID')}</span>
-              </div>
-            )}
-          </div>
-
-          {/* QRIS Overlay */}
-          {qrisTx && (
-            <div className="qris-overlay">
-              <div className="qris-header">{t('qrisTitle')}</div>
-              <div style={{ fontSize: 11, color: '#a8a29e', textAlign: 'center', marginTop: -8 }}>
-                {t('qrisMerchant')} {settings.shopName}
-              </div>
-              <div className="qris-code-container">
-                <svg width="150" height="150" viewBox="0 0 100 100" style={{ shapeRendering: 'crispEdges' }}>
-                  <rect width="100" height="100" fill="white" />
-                  <rect x="5" y="5" width="20" height="20" fill="black" /><rect x="10" y="10" width="10" height="10" fill="white" />
-                  <rect x="75" y="5" width="20" height="20" fill="black" /><rect x="80" y="10" width="10" height="10" fill="white" />
-                  <rect x="5" y="75" width="20" height="20" fill="black" /><rect x="10" y="80" width="10" height="10" fill="white" />
-                  <rect x="35" y="10" width="5" height="10" fill="black" /><rect x="45" y="5" width="15" height="5" fill="black" />
-                  <rect x="30" y="30" width="10" height="5" fill="black" /><rect x="55" y="25" width="5" height="15" fill="black" />
-                  <rect x="65" y="45" width="15" height="10" fill="black" /><rect x="40" y="50" width="10" height="15" fill="black" />
-                  <rect x="30" y="70" width="15" height="5" fill="black" /><rect x="50" y="65" width="5" height="20" fill="black" />
-                  <rect x="70" y="75" width="15" height="5" fill="black" /><rect x="80" y="60" width="5" height="10" fill="black" />
-                  <rect x="40" y="40" width="20" height="20" fill="red" />
-                  <text x="50" y="52" fill="white" fontSize="6" fontWeight="bold" textAnchor="middle">QRIS</text>
-                </svg>
-              </div>
-              <div className="qris-total">Rp {qrisTx.total.toLocaleString('id-ID')}</div>
-              <div style={{ display: 'flex', gap: 10, width: '100%', marginTop: 12 }}>
-                <button className="btn btn-danger" onClick={() => { setQrisTx(null); setCart([]); showToast(t('toastPaymentCancelled')); }} style={{ flex: 1, borderRadius: 12 }}>
-                  {t('qrisBatal')}
-                </button>
-                <button className="btn btn-primary" onClick={handleCompletePaymentMock} style={{ flex: 2, borderRadius: 12 }}>
-                  {t('qrisSuccess')}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Controls */}
-        <div className="device-controls">
-          {!isRunning ? (
-            <button className="btn btn-primary" onClick={startSimulator} style={{ width: '100%', height: 48, borderRadius: 24, fontSize: 15, fontWeight: 700 }}>
-              {t('powerOn')}
-            </button>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div className="interactive-controls">
                 <button
-                  className={`mic-button ${isRecording ? 'active' : 'muted'}`}
+                  className={`kiosk-btn-mic ${isRecording ? 'recording' : 'muted'}`}
                   onClick={() => isRecording ? stopRecording() : startRecording()}
-                  style={{ padding: '10px 20px', borderRadius: '24px', border: 'none', backgroundColor: isRecording ? '#10b981' : '#78716c', color: 'white', fontWeight: 'bold', cursor: 'pointer', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  {isRecording ? t('micActive') : t('micMuted')}
+                  <span className="mic-icon">{isRecording ? '🎙️' : '🔇'}</span>
+                  <span className="mic-text">{isRecording ? t('micActive') : t('micMuted')}</span>
                 </button>
-                <button className="btn btn-danger" onClick={stopSimulator} style={{ width: 64, borderRadius: 24 }}>⏹️</button>
+                <button className="kiosk-btn-stop" onClick={stopSimulator}>
+                  ⏹️ Stop
+                </button>
               </div>
-              <form onSubmit={handleSendTextFallback} className="text-chat-fallback">
+            )}
+
+            {/* Fallback Text Console */}
+            {isRunning && (
+              <form onSubmit={handleSendTextFallback} className="kiosk-text-input-form">
                 <input
                   type="text"
-                  className="text-chat-fallback-input"
+                  className="kiosk-text-input"
                   placeholder={t('fallbackPlaceholder')}
                   value={textFallbackInput}
                   onChange={e => setTextFallbackInput(e.target.value)}
                 />
-                <button type="submit" className="text-chat-fallback-submit">{t('send')}</button>
+                <button type="submit" className="kiosk-text-submit">{t('send')}</button>
               </form>
-            </div>
-          )}
+            )}
+          </div>
+
         </div>
 
-        <div style={{ textAlign: 'center', fontSize: 10, color: '#78716c', marginTop: -8 }}>
-          {uiLang === 'en' ? 'Click Mic to talk, or use text chat above to type.'
-            : uiLang === 'cn' ? '点击麦克风开始对话，或使用上方文本框输入。'
-            : 'Tekan tombol Mic untuk bicara, atau gunakan input teks di atasnya untuk mengetik.'}
+        {/* RIGHT COLUMN: Bill, Cart, Recommendations & QRIS */}
+        <div className="kiosk-right-panel">
+          
+          <div className="panel-title-bar">
+            <h2>🛒 {t('activeCart')}</h2>
+          </div>
+
+          {/* Cart items list */}
+          <div className="kiosk-cart-box">
+            {cart.length === 0 ? (
+              <div className="empty-cart-view">
+                <div className="empty-icon">☕</div>
+                <p className="empty-text">{t('noItems')}</p>
+                
+                {/* Menu Suggestions when cart is empty */}
+                {recommendations.length > 0 && (
+                  <div className="suggestions-container">
+                    <p className="suggestion-heading">✨ {uiLang === 'en' ? 'Special Recommendations' : uiLang === 'cn' ? '特别推荐' : 'Rekomendasi Spesial'}</p>
+                    <div className="suggestion-grid">
+                      {recommendations.map(item => (
+                        <div key={item.id} className="suggestion-card">
+                          <div className="card-top">
+                            <span className="suggestion-name">{item.name}</span>
+                            {item.bestSeller && <span className="best-tag">🔥 Best</span>}
+                          </div>
+                          <span className="suggestion-price">Rp {item.price.toLocaleString('id-ID')}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="hint-text">
+                      💡 {uiLang === 'en' ? 'Try saying: "I want to order ' : uiLang === 'cn' ? '试试说：“我想点一杯' : 'Coba katakan: "Saya mau pesan '}
+                      {recommendations[0]?.name}"
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="cart-list">
+                {cart.map((item, idx) => (
+                  <div className="cart-item-card" key={idx}>
+                    <div className="item-details">
+                      <span className="item-qty">{item.quantity}x</span>
+                      <span className="item-name">{item.name}</span>
+                    </div>
+                    <span className="item-price">Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Cart Summary */}
+          {cart.length > 0 && (
+            <div className="cart-total-box">
+              <div className="total-row">
+                <span className="total-label">{t('totalCart')}</span>
+                <span className="total-amount">
+                  Rp {cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toLocaleString('id-ID')}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* QRIS Overlay */}
+          {qrisTx && (
+            <div className="qris-payment-panel">
+              <div className="qris-card">
+                <div className="qris-brand">{t('qrisTitle')}</div>
+                <div className="qris-merchant">{t('qrisMerchant')} {settings.shopName}</div>
+                
+                <div className="qris-qr-wrapper">
+                  <svg width="160" height="160" viewBox="0 0 100 100" style={{ shapeRendering: 'crispEdges' }}>
+                    <rect width="100" height="100" fill="white" />
+                    {/* Corner Squares */}
+                    <rect x="5" y="5" width="20" height="20" fill="black" /><rect x="10" y="10" width="10" height="10" fill="white" />
+                    <rect x="75" y="5" width="20" height="20" fill="black" /><rect x="80" y="10" width="10" height="10" fill="white" />
+                    <rect x="5" y="75" width="20" height="20" fill="black" /><rect x="10" y="80" width="10" height="10" fill="white" />
+                    
+                    {/* Details */}
+                    <rect x="35" y="10" width="5" height="10" fill="black" /><rect x="45" y="5" width="15" height="5" fill="black" />
+                    <rect x="30" y="30" width="10" height="5" fill="black" /><rect x="55" y="25" width="5" height="15" fill="black" />
+                    <rect x="65" y="45" width="15" height="10" fill="black" /><rect x="40" y="50" width="10" height="15" fill="black" />
+                    <rect x="30" y="70" width="15" height="5" fill="black" /><rect x="50" y="65" width="5" height="20" fill="black" />
+                    <rect x="70" y="75" width="15" height="5" fill="black" /><rect x="80" y="60" width="5" height="10" fill="black" />
+                    
+                    {/* QRIS Logo Center */}
+                    <rect x="40" y="40" width="20" height="20" fill="red" />
+                    <text x="50" y="52" fill="white" fontSize="6" fontWeight="bold" textAnchor="middle">QRIS</text>
+                  </svg>
+                </div>
+                
+                <div className="qris-total-text">Rp {qrisTx.total.toLocaleString('id-ID')}</div>
+                
+                <div className="qris-actions">
+                  <button className="qris-btn cancel-btn" onClick={() => { setQrisTx(null); setCart([]); showToast(t('toastPaymentCancelled')); }}>
+                    {t('qrisBatal')}
+                  </button>
+                  <button className="qris-btn pay-btn" onClick={handleCompletePaymentMock}>
+                    {t('qrisSuccess')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
 
       </div>
+
     </div>
   );
 }
